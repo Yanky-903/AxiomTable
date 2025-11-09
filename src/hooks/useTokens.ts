@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
   type UseQueryResult,
+  type UseQueryOptions,
 } from '@tanstack/react-query';
 import { fetchTokens } from '../lib/api'; // must return Promise<Token[]>
 import { createWSMock, type PriceUpdate } from '../lib/wsMock';
@@ -18,14 +19,12 @@ import type { Token } from '../types/token';
 export function useTokens(): UseQueryResult<Token[], Error> {
   const qc = useQueryClient();
 
-  // Note: we removed `cacheTime` because the v5 types don't accept it here.
-  const query = useQuery({
+  // Explicitly type the options object so TypeScript picks the right overload.
+  const options: UseQueryOptions<Token[], Error, Token[], ['tokens']> = {
     queryKey: ['tokens'],
     queryFn: fetchTokens as () => Promise<Token[]>,
-    staleTime: 5_000, // keeps data fresh for a short time
+    staleTime: 5_000,
     retry: 1,
-
-    // onSuccess typed explicitly
     onSuccess: (tokens: Token[]) => {
       if (!tokens) return;
       qc.setQueryData(['tokens', 'byId'], tokens.reduce<Record<string, Token>>((acc, t: Token) => {
@@ -33,7 +32,10 @@ export function useTokens(): UseQueryResult<Token[], Error> {
         return acc;
       }, {}));
     },
-  });
+  };
+
+  // Pass the typed options object to useQuery
+  const query = useQuery(options);
 
   useEffect(() => {
     if (!query.data || query.data.length === 0) return;
@@ -65,7 +67,7 @@ export function useTokens(): UseQueryResult<Token[], Error> {
       };
     }
 
-    // fallback interval-based updater
+    // Fallback interval-based updater (if wsMock unavailable)
     const interval = setInterval(() => {
       const current = qc.getQueryData<Token[]>(['tokens']);
       if (!current || current.length === 0) return;
