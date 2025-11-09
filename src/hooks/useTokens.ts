@@ -6,36 +6,32 @@ import {
   type UseQueryResult,
   type UseQueryOptions,
 } from '@tanstack/react-query';
-import { fetchTokens } from '../lib/api'; // must return Promise<Token[]>
+import { fetchTokens } from '../lib/api';
 import { createWSMock, type PriceUpdate } from '../lib/wsMock';
 import type { Token } from '../types/token';
 
-/**
- * useTokens
- * - Fetch tokens via React Query (Token[])
- * - Start a mock WS that updates prices and patches the cache
- * - Return the full UseQueryResult so callers can read data/isLoading/isError/refetch
- */
 export function useTokens(): UseQueryResult<Token[], Error> {
   const qc = useQueryClient();
 
-  // Explicitly type the options object so TypeScript picks the right overload.
-  const options: UseQueryOptions<Token[], Error, Token[], ['tokens']> = {
-    queryKey: ['tokens'],
+  // Typed options WITHOUT onSuccess to avoid overload issues
+  const options: UseQueryOptions<Token[], Error, Token[], readonly ['tokens']> = {
+    queryKey: ['tokens'] as const,
     queryFn: fetchTokens as () => Promise<Token[]>,
     staleTime: 5_000,
     retry: 1,
-    onSuccess: (tokens: Token[]) => {
-      if (!tokens) return;
-      qc.setQueryData(['tokens', 'byId'], tokens.reduce<Record<string, Token>>((acc, t: Token) => {
-        acc[t.id] = t;
-        return acc;
-      }, {}));
-    },
   };
 
-  // Pass the typed options object to useQuery
-  const query = useQuery(options);
+  const query = useQuery<Token[], Error, Token[], readonly ['tokens']>(options);
+
+  // When data arrives, build a byId index in cache (separate effect avoids useQuery overload issues)
+  useEffect(() => {
+    if (!query.data) return;
+    const tokens = query.data;
+    qc.setQueryData(['tokens', 'byId'], tokens.reduce<Record<string, Token>>((acc, t: Token) => {
+      acc[t.id] = t;
+      return acc;
+    }, {}));
+  }, [qc, query.data]);
 
   useEffect(() => {
     if (!query.data || query.data.length === 0) return;
@@ -52,7 +48,12 @@ export function useTokens(): UseQueryResult<Token[], Error> {
         if (!current) return [];
         return current.map((t: Token) =>
           t.id === upd.id
-            ? { ...t, price: upd.price, change24h: upd.change24h, volume24h: upd.volume24h }
+            ? {
+                ...t,
+                price: typeof upd.price === 'number' ? upd.price : t.price,
+                change24h: typeof (upd as any).change24h === 'number' ? (upd as any).change24h : t.change24h,
+                volume24h: typeof (upd as any).volume24h === 'number' ? (upd as any).volume24h : t.volume24h,
+              }
             : t
         );
       });
@@ -67,7 +68,7 @@ export function useTokens(): UseQueryResult<Token[], Error> {
       };
     }
 
-    // Fallback interval-based updater (if wsMock unavailable)
+    // Fallback interval-based updater (includes timestamp & other fields)
     const interval = setInterval(() => {
       const current = qc.getQueryData<Token[]>(['tokens']);
       if (!current || current.length === 0) return;
@@ -81,7 +82,15 @@ export function useTokens(): UseQueryResult<Token[], Error> {
       const newChange = Number((t.change24h + (delta / Math.max(1, t.price)) * 100).toFixed(2));
       const newVol = Math.max(0, Math.round(t.volume24h * (1 + (Math.random() - 0.5) * 0.06)));
 
-      applyUpdate({ id: t.id, price: newPrice, change24h: newChange, volume24h: newVol });
+      const upd: PriceUpdate = {
+        id: t.id,
+        price: newPrice,
+        timestamp: Date.now(),
+        change24h: newChange,
+        volume24h: newVol,
+      };
+
+      applyUpdate(upd);
     }, 1000);
 
     return () => clearInterval(interval);
