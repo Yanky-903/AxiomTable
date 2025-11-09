@@ -1,65 +1,141 @@
-import Image from "next/image";
+// src/app/page.tsx
+'use client';
 
-export default function Home() {
+import React from 'react';
+import { useAppDispatch, useAppSelector } from '../store';
+import { setSort, selectToken, openDetailsModal, closeDetailsModal } from '../store/tokensSlice';
+import dynamic from 'next/dynamic';
+const TokenDetailsModal = dynamic(() => import('../components/modals/TokenDetailsModal'), { ssr: false });
+
+// Try to import the TokenTable; if it doesn't exist yet, show a small message.
+// (This keeps the page resilient while you add component files.)
+let TokenTable: React.ComponentType<any> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // @ts-ignore
+  TokenTable = require('../components/table/TokenTable').default;
+} catch (e) {
+  TokenTable = null;
+}
+
+export default function HomePage() {
+  const dispatch = useAppDispatch();
+  const { sortKey, sortDirection, selectedTokenId, isDetailsModalOpen } = useAppSelector(
+    (s) => s.tokensUI
+  );
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="min-h-screen py-8">
+      <div className="mx-auto w-full max-w-6xl bg-white rounded-md shadow p-6">
+        <h1 className="text-2xl font-semibold mb-4">Axiom Token Table — Dev Playground</h1>
+
+        <section className="mb-6">
+          <div className="flex items-center gap-3 mb-2">
+            <strong>Sort:</strong>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-1 rounded border text-sm"
+                onClick={() => dispatch(setSort({ key: 'price', direction: sortDirection ?? 'desc' }))}
+              >
+                By Price
+              </button>
+              <button
+                className="px-3 py-1 rounded border text-sm"
+                onClick={() =>
+                  dispatch(setSort({ key: 'change24h', direction: sortDirection ?? 'desc' }))
+                }
+              >
+                By Change (24h)
+              </button>
+              <button
+                className="px-3 py-1 rounded border text-sm"
+                onClick={() => dispatch(setSort({ key: null, direction: null }))}
+              >
+                Clear Sort
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <strong>Direction:</strong>
+            <button
+              className="px-3 py-1 rounded border text-sm"
+              onClick={() =>
+                dispatch(
+                  setSort({
+                    key: sortKey,
+                    direction: sortDirection === 'asc' ? 'desc' : 'asc',
+                  })
+                )
+              }
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              Toggle Direction ({sortDirection ?? 'none'})
+            </button>
+          </div>
+        </section>
+
+        <section className="mb-6">
+          <h2 className="text-lg font-medium mb-2">Selection & Modal</h2>
+          <div className="flex items-center gap-3">
+            <button
+              className="px-3 py-1 rounded border text-sm"
+              onClick={() => dispatch(selectToken('token-123'))}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+              Select token-123
+            </button>
+            <button
+              className="px-3 py-1 rounded border text-sm"
+              onClick={() => dispatch(selectToken(null))}
+            >
+              Clear selection
+            </button>
+
+            <button
+              className="px-3 py-1 rounded border text-sm"
+              onClick={() => dispatch(openDetailsModal())}
+            >
+              Open Details Modal
+            </button>
+            <button
+              className="px-3 py-1 rounded border text-sm"
+              onClick={() => dispatch(closeDetailsModal())}
+            >
+              Close Modal
+            </button>
+          </div>
+
+          <div className="mt-4 text-sm text-slate-600">
+            <div>
+              <strong>Selected token:</strong> {selectedTokenId ?? '—'}
+            </div>
+            <div>
+              <strong>Details modal open:</strong> {isDetailsModalOpen ? 'Yes' : 'No'}
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-medium mb-2">Current Redux UI State</h2>
+          <pre className="bg-slate-50 p-3 rounded text-xs overflow-auto">
+            {JSON.stringify({ sortKey, sortDirection, selectedTokenId, isDetailsModalOpen }, null, 2)}
+          </pre>
+        </section>
+      </div>
+
+      {/* Token table area */}
+      <div className="mx-auto w-full max-w-6xl mt-6">
+        {TokenTable ? (
+          <TokenTable />
+        ) : (
+          <div className="p-6 bg-white rounded shadow text-sm text-slate-600">
+            <strong>TokenTable component not found.</strong>
+            <div className="mt-2">Create <code>src/components/table/TokenTable.tsx</code> (I provided code earlier) and reload.</div>
+          </div>
+        )}
+      </div>
+
+      {/* Mount the modal once at page level (client-only via dynamic import) */}
+      <TokenDetailsModal />
     </div>
   );
 }
